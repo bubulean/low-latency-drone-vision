@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Low-Latency Drone Vision</title>
+<meta name="description" content="Design and Evaluation of a Low&#8209;Latency Drone&#8209;Based Vision System — benchmarking seven face recognizers under a simulated 400 MHz / 128 MB UAV budget, with live re-validation.">
+<meta property="og:title" content="Design and Evaluation of a Low&#8209;Latency Drone&#8209;Based Vision System">
+<meta property="og:description" content="MobileFaceNet reaches 92.74% on DroneFace at 16.7 ms — within ~3 points of ArcFace-R50 while running ~39× faster under a simulated UAV budget.">
+<meta property="og:image" content="assets/poster.jpg">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='5' fill='%232a78d6'/><g stroke='%232a78d6' stroke-width='2.5' fill='none'><circle cx='6' cy='6' r='4'/><circle cx='26' cy='6' r='4'/><circle cx='6' cy='26' r='4'/><circle cx='26' cy='26' r='4'/></g></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #ffffff;
+  --surface-2: #f4f3f0;
+  --border: #e4e2dc;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #7a7974;
+  --accent: #2a78d6;
+  --accent-soft: #e6f0fc;
+  --s1: #2a78d6;   /* DroneFace */
+  --s2: #eb6834;   /* VGGFace2 / highlight */
+  --neutral-mark: #a8a7a1;
+  --grid: #ecebe7;
+  --good: #1a7f37;
+  --bad: #c0362c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface: #1a1a19;
+    --surface-2: #222220;
+    --border: #33332f;
+    --text: #f5f5f3;
+    --text-2: #c3c2b7;
+    --text-3: #8d8c84;
+    --accent: #3987e5;
+    --accent-soft: #1b2a3d;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --neutral-mark: #6b6a64;
+    --grid: #2a2a27;
+    --good: #4cc26a;
+    --bad: #ef6b60;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #222220; --border: #33332f;
+  --text: #f5f5f3; --text-2: #c3c2b7; --text-3: #8d8c84;
+  --accent: #3987e5; --accent-soft: #1b2a3d; --s1: #3987e5; --s2: #d95926;
+  --neutral-mark: #6b6a64; --grid: #2a2a27; --good: #4cc26a; --bad: #ef6b60;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.65 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: .88em; }
+
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+.narrow { max-width: 760px; margin: 0 auto; }
+
+/* ---------- hero ---------- */
+header.hero { padding: 72px 0 40px; text-align: center; }
+.venue { display: inline-block; font-size: 13px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); margin-bottom: 18px; }
+h1 {
+  font-family: "Source Serif 4", Georgia, serif; font-weight: 600;
+  font-size: clamp(30px, 5.2vw, 50px); line-height: 1.12; letter-spacing: -.015em;
+  margin: 0 auto 26px; max-width: 860px; text-wrap: balance;
+}
+.authors { font-size: 17px; margin: 0 0 6px; }
+.authors span { white-space: nowrap; }
+.authors span:not(:last-child)::after { content: ","; margin-right: .4em; }
+.affil { color: var(--text-2); font-size: 15px; margin: 0; }
+.buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 30px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 18px; border-radius: 999px;
+  background: var(--text); color: var(--bg); font-weight: 500; font-size: 15px;
+  border: 1px solid var(--text); transition: transform .12s ease, opacity .12s;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); opacity: .9; }
+.btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+.btn svg { width: 17px; height: 17px; flex: none; }
+.btn small { font-weight: 400; opacity: .7; font-size: 12.5px; }
+
+/* ---------- media ---------- */
+.video {
+  margin: 8px auto 0; border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--border); background: #000; aspect-ratio: 16/9;
+}
+.video video { width: 100%; height: 100%; display: block; }
+.caption { color: var(--text-2); font-size: 14px; text-align: center; margin: 12px auto 0; max-width: 720px; }
+
+/* ---------- sections ---------- */
+section { padding: 56px 0 8px; }
+h2 {
+  font-family: "Source Serif 4", Georgia, serif; font-weight: 600;
+  font-size: 28px; letter-spacing: -.01em; margin: 0 0 18px; text-align: center;
+}
+h3 { font-size: 17px; font-weight: 600; margin: 32px 0 10px; }
+p { margin: 0 0 14px; }
+.lead { font-size: 18px; color: var(--text-2); text-align: center; text-wrap: pretty; }
+.abstract { text-align: justify; hyphens: auto; }
+
+/* ---------- stats ---------- */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 34px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 16px; text-align: center; }
+.stat b { display: block; font-family: "Source Serif 4", Georgia, serif; font-size: 34px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat span { display: block; color: var(--text-2); font-size: 13.5px; line-height: 1.4; margin-top: 6px; }
+
+/* ---------- pipeline ---------- */
+.phases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
+.phase { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; position: relative; }
+.phase .tag { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.phase h4 { margin: 4px 0 8px; font-size: 17px; }
+.phase p { font-size: 14.5px; color: var(--text-2); margin: 0 0 12px; }
+.phase a.repo { font-size: 13.5px; font-weight: 500; }
+.diagram { margin: 26px 0 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 12px; overflow-x: auto; }
+.diagram svg { display: block; min-width: 640px; width: 100%; height: auto; margin: 0 auto; }
+.diagram text { font-family: Inter, system-ui, sans-serif; }
+
+/* ---------- findings ---------- */
+.findings { counter-reset: f; display: grid; gap: 14px; }
+.finding { display: grid; grid-template-columns: 44px 1fr; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.finding::before { counter-increment: f; content: counter(f); width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; }
+.finding h4 { margin: 4px 0 4px; font-size: 16.5px; }
+.finding p { margin: 0; color: var(--text-2); font-size: 15px; }
+
+/* ---------- charts ---------- */
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 20px 14px; margin-top: 18px; position: relative; }
+.chart-card h4 { margin: 0 0 2px; font-size: 15.5px; }
+.chart-card .sub { margin: 0 0 10px; color: var(--text-2); font-size: 13.5px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-family: Inter, system-ui, sans-serif; fill: var(--text-2); font-size: 12px; }
+.chart .axis-title { fill: var(--text-3); font-size: 12px; }
+.chart .lbl { fill: var(--text); font-size: 12.5px; font-weight: 500; }
+.chart .lbl.hl { font-weight: 700; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); margin: 0 0 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.tip {
+  position: absolute; pointer-events: none; z-index: 5; opacity: 0; transition: opacity .1s;
+  background: var(--text); color: var(--bg); font-size: 12.5px; line-height: 1.45;
+  padding: 8px 10px; border-radius: 8px; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.18);
+}
+.tip b { font-weight: 600; }
+.hit { fill: transparent; cursor: default; }
+
+/* ---------- tables ---------- */
+.tbl-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 14px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-weight: 600; color: var(--text-2); font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+tbody tr + tr td { border-top: 1px solid var(--grid); }
+tr.hl td { background: var(--accent-soft); }
+tr.hl td:first-child { font-weight: 600; }
+td.best { font-weight: 700; }
+.heat td.h { color: var(--text); }
+.note { font-size: 13px; color: var(--text-3); margin-top: 8px; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* ---------- bibtex ---------- */
+pre.bib {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 20px; overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 0; position: relative;
+}
+.copy { position: absolute; top: 10px; right: 10px; font: 500 12px Inter, sans-serif; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); cursor: pointer; }
+.copy:hover { color: var(--text); }
+
+ul.limits { padding-left: 20px; margin: 0; color: var(--text-2); }
+ul.limits li { margin-bottom: 6px; }
+
+footer { margin-top: 72px; padding: 28px 0 40px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 13.5px; text-align: center; }
+footer a { color: var(--text-2); }
+
+@media (max-width: 760px) {
+  header.hero { padding-top: 48px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .phases, .two { grid-template-columns: 1fr; }
+  .stat b { font-size: 28px; }
+  th, td { padding: 8px 10px; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero wrap">
+  <div class="venue">MBZUAI · IoT Course Project · 2026</div>
+  <h1>Design and Evaluation of a Low&#8209;Latency Drone&#8209;Based Vision System</h1>
+  <p class="authors">
+    <span>Alyaa Alghfeli</span> <span>Buthaina Almulla</span> <span>Dilnaz Utemissova</span> <span>Jenna Khanfar</span> <span>Shamma Yaqoob</span>
+  </p>
+  <p class="affil">Mohamed bin Zayed University of Artificial Intelligence, Abu Dhabi, UAE</p>
+
+  <nav class="buttons" aria-label="Project links">
+    <a class="btn" href="assets/paper.pdf">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
+      Paper
+    </a>
+    <a class="btn" href="https://github.com/bubulean/drone_project">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      Live Drone App <small>bubulean</small>
+    </a>
+    <a class="btn" href="https://github.com/jennakhanfar/IOT-DRONE-PROJECT">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      Benchmark Harness <small>jennakhanfar</small>
+    </a>
+    <a class="btn ghost" href="#demo">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      Demo
+    </a>
+    <a class="btn ghost" href="#citation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 7H6a2 2 0 0 0-2 2v3h6v6H4M20 7h-4a2 2 0 0 0-2 2v3h6v6h-6"/></svg>
+      BibTeX
+    </a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <div id="demo" class="video">
+    <video controls playsinline preload="metadata" poster="assets/poster.jpg">
+      <source src="assets/demo.mp4" type="video/mp4">
+    </video>
+  </div>
+  <p class="caption">Live demo: the drone streams video to a laptop while a constrained “drone-side” worker runs UltraFace + MobileFaceNet, raising intruder alerts on recognized faces across altitudes, angles, and edge cases.</p>
+
+  <div class="stats narrow">
+    <div class="stat"><b>92.74%</b><span>MobileFaceNet accuracy on DroneFace</span></div>
+    <div class="stat"><b>16.7 ms</b><span>per-face latency at 400 MHz (59.7 FPS)</span></div>
+    <div class="stat"><b>~39×</b><span>faster than accuracy-best ArcFace-R50</span></div>
+    <div class="stat"><b>7</b><span>recognizers, 1.1 M → 65 M params</span></div>
+  </div>
+
+  <section id="abstract" class="narrow">
+    <h2>Abstract</h2>
+    <p class="abstract">This paper presents a controlled empirical study of face recognition under realistic UAV deployment constraints. We combine a live UAV streaming pipeline with a benchmark framework that fixes the detector, preprocessing, gallery construction, and similarity metric while varying only the recognition model. Seven pretrained recognizers, ranging from a 1.1M-parameter SFace model to a 65M-parameter ArcFace-R100 model, are evaluated under a simulated 400&nbsp;MHz single-core CPU and 128&nbsp;MB inference-memory budget on the DroneFace dataset, with VGGFace2 used as a generalization probe. We also report per-altitude, per-distance, and per-gender breakdowns. Three findings emerge. First, MobileFaceNet achieves 92.74% accuracy at 16.7&nbsp;ms latency (59.7&nbsp;FPS), within approximately three percentage points of the accuracy-best ArcFace-R50 model while running about 39× faster. Second, training-distribution alignment can be as important as architectural capacity: FaceNet performs best on VGGFace2 but degrades substantially on DroneFace, while ArcFace-based models show stronger performance under aerial conditions. Third, CPU-frequency scaling is non-uniform, with mid-weight models benefiting more clearly than very light models dominated by runtime overhead or very heavy models dominated by compute saturation. These results identify MobileFaceNet as the most practical deployment choice under the simulated UAV constraint, and live re-validation on 17 edge-case streaming clips preserves the Phase&nbsp;2 ranking while exposing a sharp drop in absolute accuracy attributable to threshold-gated matching and to specific lighting and geometry cases.</p>
+  </section>
+
+  <section id="method">
+    <h2>A three-phase study</h2>
+    <p class="lead narrow">Build a real live pipeline, rank recognizers fairly under a simulated drone budget, then plug the winners back in to see if the ranking survives the real stream.</p>
+
+    <div class="phases">
+      <div class="phase">
+        <div class="tag">Phase 1</div>
+        <h4>Live deployment pipeline</h4>
+        <p>Hula drone → RTP stream → laptop. Detection and recognition run in an isolated “drone-side” subprocess with a depth-1 drop-old frame queue, so inference always sees the newest frame. Alerts, snapshots, and optional tracking with per-identity cooldowns.</p>
+        <a class="repo" href="https://github.com/bubulean/drone_project">bubulean/drone_project →</a>
+      </div>
+      <div class="phase">
+        <div class="tag">Phase 2</div>
+        <h4>Controlled benchmark harness</h4>
+        <p>UltraFace detector, preprocessing, gallery, and cosine metric fixed; only the recognizer changes. Single-core affinity, duty-cycle CPU throttling to 250/400/650&nbsp;MHz, and a hard 128&nbsp;MB RSS-delta kill switch.</p>
+        <a class="repo" href="https://github.com/jennakhanfar/IOT-DRONE-PROJECT">jennakhanfar/IOT-DRONE-PROJECT →</a>
+      </div>
+      <div class="phase">
+        <div class="tag">Phase 3</div>
+        <h4>Live re-validation</h4>
+        <p>The top two benchmark models (MobileFaceNet, ArcFace-R50) are replayed through the live pipeline on 17 edge-case clips: hijab, glasses, mask, steep overhead and side angles, near-dark, harsh sun.</p>
+        <a class="repo" href="https://github.com/bubulean/drone_project/tree/main/edge_cases">edge-case clips →</a>
+      </div>
+    </div>
+
+    <figure class="diagram" aria-label="System pipeline diagram">
+      <svg viewBox="0 0 900 210" role="img">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--text-3)"/></marker>
+        </defs>
+        <style>
+          .bx { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.2; }
+          .bx.acc { fill: var(--accent-soft); stroke: var(--accent); }
+          .t1 { fill: var(--text); font-size: 14px; font-weight: 600; }
+          .t2 { fill: var(--text-2); font-size: 12px; }
+          .ln { stroke: var(--text-3); stroke-width: 1.5; fill: none; }
+          .grp { fill: none; stroke: var(--accent); stroke-dasharray: 5 4; stroke-width: 1.2; }
+          .gl { fill: var(--accent); font-size: 11.5px; font-weight: 600; letter-spacing: .05em; }
+        </style>
+        <rect class="bx" x="10" y="70" width="120" height="70" rx="10"/>
+        <text class="t1" x="70" y="100" text-anchor="middle">Drone camera</text>
+        <text class="t2" x="70" y="119" text-anchor="middle">H.264 / RTP</text>
+
+        <rect class="bx" x="170" y="70" width="130" height="70" rx="10"/>
+        <text class="t1" x="235" y="100" text-anchor="middle">Frame queue</text>
+        <text class="t2" x="235" y="119" text-anchor="middle">depth 1, drop-old</text>
+
+        <rect class="grp" x="325" y="28" width="410" height="150" rx="14"/>
+        <text class="gl" x="340" y="48">SIMULATED DRONE CPU · 400 MHz · 1 core · 128 MB</text>
+
+        <rect class="bx" x="340" y="70" width="110" height="70" rx="10"/>
+        <text class="t1" x="395" y="100" text-anchor="middle">UltraFace</text>
+        <text class="t2" x="395" y="119" text-anchor="middle">320×240, NMS</text>
+
+        <rect class="bx acc" x="475" y="70" width="120" height="70" rx="10"/>
+        <text class="t1" x="535" y="100" text-anchor="middle">Recognizer</text>
+        <text class="t2" x="535" y="119" text-anchor="middle">swappable ×7</text>
+
+        <rect class="bx" x="620" y="70" width="100" height="70" rx="10"/>
+        <text class="t1" x="670" y="100" text-anchor="middle">Gallery</text>
+        <text class="t2" x="670" y="119" text-anchor="middle">cosine, τ = 0.3</text>
+
+        <rect class="bx" x="765" y="70" width="125" height="70" rx="10"/>
+        <text class="t1" x="827" y="100" text-anchor="middle">Action layer</text>
+        <text class="t2" x="827" y="119" text-anchor="middle">alert · snap · track</text>
+
+        <path class="ln" d="M130 105H166" marker-end="url(#ar)"/>
+        <path class="ln" d="M300 105H336" marker-end="url(#ar)"/>
+        <path class="ln" d="M450 105H471" marker-end="url(#ar)"/>
+        <path class="ln" d="M595 105H616" marker-end="url(#ar)"/>
+        <path class="ln" d="M720 105H761" marker-end="url(#ar)"/>
+        <text class="t2" x="535" y="162" text-anchor="middle">112×112 crop → L2-normalized embedding</text>
+      </svg>
+    </figure>
+  </section>
+
+  <section id="findings" class="narrow">
+    <h2>Key findings</h2>
+    <div class="findings">
+      <div class="finding"><div>
+        <h4>MobileFaceNet is the practical winner</h4>
+        <p>92.74% on DroneFace at 16.7&nbsp;ms (59.7&nbsp;FPS), within ~3 points of ArcFace-R50 (95.75%) while running ~39× faster, using under 3% of its parameters and ~0.2&nbsp;MB of inference memory.</p>
+      </div></div>
+      <div class="finding"><div>
+        <h4>Training distribution matters as much as capacity</h4>
+        <p>FaceNet wins on VGGFace2 (93.33%, its own training set) but drops to 78.37% on DroneFace; ArcFace variants show the opposite pattern. Evaluate on data from the deployment distribution.</p>
+      </div></div>
+      <div class="finding"><div>
+        <h4>CPU frequency is not a universal lever</h4>
+        <p>Only mid-weight models (ArcFace-R18, FaceNet) speed up from 250→650&nbsp;MHz. Tiny models are dominated by runtime overhead; heavy ones are compute-saturated. Architecture is the primary deployment decision.</p>
+      </div></div>
+      <div class="finding"><div>
+        <h4>Live streaming exposes a threshold problem</h4>
+        <p>The benchmark ranking holds live, but absolute accuracy collapses (92.74% → 23.5% for MobileFaceNet). The dominant live failure is a similarity-below-τ “Unknown” miss, not identity confusion, so the threshold is the next knob to tune.</p>
+      </div></div>
+    </div>
+  </section>
+
+  <section id="results">
+    <h2>Results</h2>
+
+    <div class="chart-card">
+      <h4>Accuracy vs. latency on DroneFace</h4>
+      <p class="sub">400 MHz single-core, 128 MB budget. Latency on a log scale; up and to the left is better.</p>
+      <div class="chart" id="scatter"></div>
+      <div class="tip"></div>
+    </div>
+
+    <h3>Recognition performance on DroneFace (400 MHz / 128 MB)</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Model</th><th>Params</th><th>Acc. (%)</th><th>Latency (ms)</th><th>P95 (ms)</th><th>FPS</th><th>Size (MB)</th><th>ΔRAM (MB)</th></tr></thead>
+        <tbody>
+          <tr><td>ArcFace-R50</td><td>43.6 M</td><td class="best">95.75</td><td>659.2</td><td>902.6</td><td>1.5</td><td>166.3</td><td>14.2</td></tr>
+          <tr><td>ArcFace-R100</td><td>65.0 M</td><td>93.18</td><td>1152.5</td><td>1393.3</td><td>0.9</td><td>248.6</td><td>12.5</td></tr>
+          <tr class="hl"><td>MobileFaceNet</td><td>1.2 M</td><td>92.74</td><td class="best">16.7</td><td class="best">29.7</td><td class="best">59.7</td><td class="best">13.0</td><td class="best">0.2</td></tr>
+          <tr><td>ArcFace-R18</td><td>12.4 M</td><td>86.80</td><td>55.2</td><td>81.9</td><td>18.1</td><td>91.8</td><td>9.2</td></tr>
+          <tr><td>FaceNet</td><td>27.9 M</td><td>78.37</td><td>261.4</td><td>336.2</td><td>3.8</td><td>106.8</td><td>12.6</td></tr>
+          <tr><td>FaceNet-CASIA</td><td>28.9 M</td><td>74.85</td><td>241.1</td><td>328.0</td><td>4.1</td><td>110.6</td><td>13.8</td></tr>
+          <tr><td>SFace</td><td>1.1 M</td><td>56.96</td><td>109.1</td><td>172.5</td><td>9.2</td><td>36.9</td><td>0.2</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">ΔRAM is the peak inference-time memory delta enforced against the 128 MB budget. ArcFace-R100’s 248 MB weights exceed the drone’s total RAM by construction.</p>
+
+    <div class="chart-card">
+      <h4>Generalization: DroneFace vs. VGGFace2</h4>
+      <p class="sub">Accuracy (%) at 400 MHz. The model that wins on generic faces is not the one that wins from the air.</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>DroneFace</span> <span><i style="background:var(--s2)"></i>VGGFace2</span></div>
+      <div class="chart" id="bars"></div>
+      <div class="tip"></div>
+    </div>
+
+    <h3>Accuracy (%) by subject distance on DroneFace</h3>
+    <div class="tbl-wrap">
+      <table class="heat" id="dist"></table>
+    </div>
+    <p class="note">MFN = MobileFaceNet. Darker cells are higher accuracy. FaceNet collapses beyond ~10 m; only the heavy ArcFace models hold up at 16 m.</p>
+
+    <div class="two">
+      <div>
+        <h3>Accuracy (%) by drone altitude</h3>
+        <div class="tbl-wrap"><table class="heat" id="alt"></table></div>
+      </div>
+      <div>
+        <h3>Latency (ms) vs. CPU target</h3>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Model</th><th>250</th><th>400</th><th>650 MHz</th></tr></thead>
+            <tbody>
+              <tr><td>ArcFace-R100</td><td>1092.3</td><td>1152.5</td><td>1126.2</td></tr>
+              <tr><td>ArcFace-R50</td><td>615.7</td><td>659.2</td><td>624.6</td></tr>
+              <tr><td>FaceNet</td><td>298.9</td><td>261.4</td><td>221.3</td></tr>
+              <tr><td>FaceNet-CASIA</td><td>282.8</td><td>241.1</td><td>223.2</td></tr>
+              <tr><td>SFace</td><td>105.9</td><td>109.1</td><td>103.2</td></tr>
+              <tr><td>ArcFace-R18</td><td>64.4</td><td>55.2</td><td>55.6</td></tr>
+              <tr class="hl"><td>MobileFaceNet</td><td>24.3</td><td>16.7</td><td>19.5</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <h3>Phase 3: benchmark vs. live streaming</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Recognizer</th><th>Phase 2 acc.</th><th>Live acc.</th><th>Live acc. (face detected)</th><th>Live latency (ms)</th><th>Phase 2 FPS</th><th>Live FPS</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td>MobileFaceNet</td><td>92.74%</td><td>23.5%</td><td>34.0%</td><td>74.8</td><td>59.7</td><td>13.4</td></tr>
+          <tr><td>ArcFace-R50*</td><td>95.75%</td><td>28.4%</td><td>39.4%</td><td>307.3</td><td>1.5</td><td>3.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">*ArcFace-R50 needed the simulated RAM cap raised from 128 MB to 512 MB to load its 166 MB ONNX, so it is a memory-relaxed reference rather than a deployable candidate. Live matching is thresholded best-match with an explicit Unknown outcome, which is stricter than Phase 2’s closed-set nearest-centroid rule.</p>
+  </section>
+
+  <section id="limitations" class="narrow">
+    <h2>Limitations &amp; future work</h2>
+    <ul class="limits">
+      <li>The hardware budget is simulated with an x86 duty-cycle throttle, so latencies are good for ranking but not cycle-accurate for a real onboard processor. Next step: deploy MobileFaceNet on a physical ARM target.</li>
+      <li>DroneFace has only 11 identities (7 male, 4 female), so per-gender gaps may reflect individual subjects rather than systematic bias, and it has no skin-tone, head-covering, or weather annotations.</li>
+      <li>The live clip catalogue has no unknown-only clips, so false-alarm rate is not yet measured. A per-environment τ sweep is the natural next experiment.</li>
+    </ul>
+  </section>
+
+  <section id="code" class="narrow">
+    <h2>Code</h2>
+    <div class="phases" style="grid-template-columns:1fr 1fr">
+      <div class="phase">
+        <div class="tag">Phases 1 &amp; 3</div>
+        <h4><a href="https://github.com/bubulean/drone_project">bubulean/drone_project</a></h4>
+        <p>Live drone application: Hula stream handling, drone-side inference worker, pluggable detectors, alerts, tracking, edge-case clips, and live evaluation tools.</p>
+      </div>
+      <div class="phase">
+        <div class="tag">Phase 2</div>
+        <h4><a href="https://github.com/jennakhanfar/IOT-DRONE-PROJECT">jennakhanfar/IOT-DRONE-PROJECT</a></h4>
+        <p>Benchmark harness: drone-constraint context (CPU affinity, throttle, RSS kill), seven-model sweep orchestrator, result aggregation, and compression experiments.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="citation" class="narrow">
+    <h2>Citation</h2>
+    <pre class="bib"><button class="copy" type="button">Copy</button><code id="bibtex">@techreport{alghfeli2026dronevision,
+  title       = {Design and Evaluation of a Low&#8209;Latency Drone&#8209;Based Vision System},
+  author      = {Alghfeli, Alyaa and Almulla, Buthaina and Utemissova, Dilnaz
+                 and Khanfar, Jenna and Yaqoob, Shamma},
+  institution = {Mohamed bin Zayed University of Artificial Intelligence},
+  address     = {Abu Dhabi, United Arab Emirates},
+  year        = {2026}
+}</code></pre>
+  </section>
+</main>
+
+<footer class="wrap">
+  © 2026 the authors · MBZUAI ·
+  <a href="https://github.com/bubulean/drone_project">Live app</a> ·
+  <a href="https://github.com/jennakhanfar/IOT-DRONE-PROJECT">Benchmark</a> ·
+  <a href="assets/paper.pdf">Paper (PDF)</a>
+</footer>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+
+  function tooltip(card) {
+    const tip = card.querySelector('.tip');
+    return {
+      show(html, evt) {
+        tip.innerHTML = html; tip.style.opacity = 1;
+        const r = card.getBoundingClientRect();
+        let x = evt.clientX - r.left + 14, y = evt.clientY - r.top - 10;
+        const w = tip.offsetWidth;
+        if (x + w > r.width - 8) x = evt.clientX - r.left - w - 14;
+        tip.style.left = x + 'px'; tip.style.top = y + 'px';
+      },
+      hide() { tip.style.opacity = 0; }
+    };
+  }
+
+  /* ---------- scatter: accuracy vs latency ---------- */
+  const models = [
+    { m: 'ArcFace-R50',   acc: 95.75, lat: 659.2,  fps: 1.5,  p: '43.6 M', dx: 8,  dy: -8 },
+    { m: 'ArcFace-R100',  acc: 93.18, lat: 1152.5, fps: 0.9,  p: '65.0 M', dx: -10, dy: 18, a: 'end' },
+    { m: 'MobileFaceNet', acc: 92.74, lat: 16.7,   fps: 59.7, p: '1.2 M',  dx: 12, dy: 4, hl: true },
+    { m: 'ArcFace-R18',   acc: 86.80, lat: 55.2,   fps: 18.1, p: '12.4 M', dx: 10, dy: 4 },
+    { m: 'FaceNet',       acc: 78.37, lat: 261.4,  fps: 3.8,  p: '27.9 M', dx: 10, dy: -6 },
+    { m: 'FaceNet-CASIA', acc: 74.85, lat: 241.1,  fps: 4.1,  p: '28.9 M', dx: -10, dy: 16, a: 'end' },
+    { m: 'SFace',         acc: 56.96, lat: 109.1,  fps: 9.2,  p: '1.1 M',  dx: 10, dy: 4 },
+  ];
+  (function scatter() {
+    const host = document.getElementById('scatter');
+    const card = host.closest('.chart-card');
+    const tt = tooltip(card);
+    const W = 900, H = 380, m = { l: 48, r: 24, t: 14, b: 44 };
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Scatter plot of accuracy versus latency for seven face recognizers' }, host);
+    const lx0 = Math.log10(10), lx1 = Math.log10(2000);
+    const x = v => m.l + (Math.log10(v) - lx0) / (lx1 - lx0) * (W - m.l - m.r);
+    const y = v => m.t + (100 - v) / (100 - 50) * (H - m.t - m.b);
+    [50, 60, 70, 80, 90, 100].forEach(v => {
+      el('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: 'var(--grid)' }, svg);
+      el('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end' }, svg).textContent = v;
+    });
+    [10, 30, 100, 300, 1000].forEach(v => {
+      el('line', { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, stroke: 'var(--grid)' }, svg);
+      el('text', { x: x(v), y: H - m.b + 18, 'text-anchor': 'middle' }, svg).textContent = v;
+    });
+    // real-time region (>= 30 FPS ≈ <= 33 ms)
+    el('rect', { x: m.l, y: m.t, width: x(33.3) - m.l, height: H - m.t - m.b, fill: 'var(--accent-soft)', opacity: .55 }, svg);
+    el('text', { x: m.l + 8, y: H - m.b - 10, class: 'axis-title' }, svg).textContent = '≥ 30 FPS';
+    el('text', { x: (m.l + W - m.r) / 2, y: H - 6, 'text-anchor': 'middle', class: 'axis-title' }, svg).textContent = 'Mean latency per face (ms, log scale)';
+    const yt = el('text', { x: 12, y: (m.t + H - m.b) / 2, 'text-anchor': 'middle', class: 'axis-title', transform: `rotate(-90 12 ${(m.t + H - m.b) / 2})` }, svg);
+    yt.textContent = 'Accuracy (%)';
+
+    models.forEach(d => {
+      const cx = x(d.lat), cy = y(d.acc);
+      el('circle', { cx, cy, r: d.hl ? 8 : 6, fill: d.hl ? 'var(--s2)' : 'var(--neutral-mark)', stroke: 'var(--surface)', 'stroke-width': 2 }, svg);
+      const t = el('text', { x: cx + d.dx, y: cy + d.dy, class: 'lbl' + (d.hl ? ' hl' : ''), 'text-anchor': d.a || 'start' }, svg);
+      t.textContent = d.m;
+      const hit = el('circle', { cx, cy, r: 18, class: 'hit' }, svg);
+      const html = `<b>${d.m}</b><br>Accuracy ${d.acc.toFixed(2)}%<br>Latency ${d.lat} ms · ${d.fps} FPS<br>${d.p} params`;
+      hit.addEventListener('mousemove', e => tt.show(html, e));
+      hit.addEventListener('mouseleave', tt.hide);
+    });
+  })();
+
+  /* ---------- grouped bars: DroneFace vs VGGFace2 ---------- */
+  (function bars() {
+    const data = [
+      ['ArcFace-R50', 95.75, 80.57], ['ArcFace-R100', 93.18, 83.68], ['MobileFaceNet', 92.74, 71.39],
+      ['ArcFace-R18', 86.80, 48.09], ['FaceNet', 78.37, 93.33], ['FaceNet-CASIA', 74.85, 64.03], ['SFace', 56.96, 11.52],
+    ];
+    const host = document.getElementById('bars');
+    const card = host.closest('.chart-card');
+    const tt = tooltip(card);
+    const W = 900, rowH = 40, bh = 13, gap = 2, m = { l: 118, r: 50, t: 6, b: 28 };
+    const H = m.t + data.length * rowH + m.b;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Grouped bar chart of DroneFace and VGGFace2 accuracy per model' }, host);
+    const x = v => m.l + v / 100 * (W - m.l - m.r);
+    [0, 25, 50, 75, 100].forEach(v => {
+      el('line', { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, stroke: 'var(--grid)' }, svg);
+      el('text', { x: x(v), y: H - m.b + 18, 'text-anchor': 'middle' }, svg).textContent = v + '%';
+    });
+    const bar = (x0, y0, w, h, fill) => {
+      // rounded data-end (right), square at baseline
+      const r = Math.min(4, w);
+      return el('path', { d: `M${x0} ${y0}H${x0 + w - r}Q${x0 + w} ${y0} ${x0 + w} ${y0 + r}V${y0 + h - r}Q${x0 + w} ${y0 + h} ${x0 + w - r} ${y0 + h}H${x0}Z`, fill }, svg);
+    };
+    data.forEach(([name, d, v], i) => {
+      const y0 = m.t + i * rowH + (rowH - 2 * bh - gap) / 2;
+      el('text', { x: m.l - 10, y: y0 + bh + 4, 'text-anchor': 'end', class: 'lbl' + (name === 'MobileFaceNet' ? ' hl' : '') }, svg).textContent = name;
+      bar(m.l, y0, x(d) - m.l, bh, 'var(--s1)');
+      bar(m.l, y0 + bh + gap, x(v) - m.l, bh, 'var(--s2)');
+      el('text', { x: x(d) + 6, y: y0 + bh - 2 }, svg).textContent = d.toFixed(1);
+      el('text', { x: x(v) + 6, y: y0 + 2 * bh + gap - 2 }, svg).textContent = v.toFixed(1);
+      const hit = el('rect', { x: 0, y: m.t + i * rowH, width: W, height: rowH, class: 'hit' }, svg);
+      const html = `<b>${name}</b><br>DroneFace ${d.toFixed(2)}%<br>VGGFace2 ${v.toFixed(2)}%`;
+      hit.addEventListener('mousemove', e => tt.show(html, e));
+      hit.addEventListener('mouseleave', tt.hide);
+    });
+  })();
+
+  /* ---------- heat tables ---------- */
+  const cols = ['R50', 'R100', 'MFN', 'R18', 'FaceNet', 'SFace'];
+  function heat(id, head, rows) {
+    const t = document.getElementById(id);
+    t.innerHTML = `<thead><tr><th>${head}</th>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+    const tb = document.createElement('tbody');
+    rows.forEach(([k, ...vals]) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${k}</td>` + vals.map(v => {
+        const a = Math.max(0, (v - 30) / 70);          // 30% → transparent, 100% → full
+        return `<td class="h" style="background:color-mix(in srgb, var(--s1) ${Math.round(a * 42)}%, transparent)">${v.toFixed(1)}</td>`;
+      }).join('');
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+  }
+  heat('dist', 'Distance', [
+    ['2 m', 79.55, 77.27, 78.41, 62.50, 73.86, 36.36],
+    ['4 m', 95.45, 94.55, 95.00, 81.36, 90.45, 40.45],
+    ['6 m', 99.24, 99.24, 99.24, 88.64, 96.97, 56.06],
+    ['8 m', 100.00, 99.09, 99.09, 95.00, 97.27, 59.55],
+    ['10 m', 99.24, 96.97, 96.97, 92.42, 91.67, 62.88],
+    ['12 m', 99.09, 97.73, 98.18, 95.91, 78.64, 66.36],
+    ['14 m', 96.97, 91.67, 89.39, 87.12, 60.61, 62.12],
+    ['16 m', 90.00, 82.73, 80.00, 80.00, 40.45, 63.64],
+  ]);
+  heat('alt', 'Altitude', [
+    ['1.5 m', 98.53, 97.95, 95.60, 87.98, 78.30, 49.85],
+    ['3.0 m', 97.95, 97.07, 95.31, 89.74, 80.06, 52.49],
+    ['4.0 m', 97.07, 94.43, 95.60, 88.86, 81.82, 63.64],
+    ['5.0 m', 89.44, 83.28, 84.46, 80.65, 73.31, 61.88],
+  ]);
+
+  /* ---------- copy bibtex ---------- */
+  const btn = document.querySelector('.copy');
+  btn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(document.getElementById('bibtex').textContent); btn.textContent = 'Copied'; }
+    catch { btn.textContent = 'Select & copy'; }
+    setTimeout(() => (btn.textContent = 'Copy'), 1600);
+  });
+})();
+</script>
+</body>
+</html>
